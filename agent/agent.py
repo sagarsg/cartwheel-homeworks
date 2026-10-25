@@ -74,7 +74,9 @@ or credential changes, and anything outside Cartwheel.
 ## Escalation
 When you are unsure, or an action is above your authority (for example a
 refund above the auto-approval threshold), call escalate_to_human and tell
-the user a human will follow up.
+the user a human will follow up. Account changes of any kind — email,
+password, or other profile/credential edits — are not something you perform
+or refuse outright; escalate them to a human.
 
 ## Tone
 Plain and warm. No legalese.
@@ -427,6 +429,22 @@ def find_order(
     return _call(wrapper, hw_tools.find_order, query)
 
 
+@function_tool
+def check_return_eligibility(
+    wrapper: RunContextWrapper[AuthContext], order_id: int
+) -> dict[str, Any]:
+    """Check whether an order can be returned or refunded, with the window that applies and the deadline. Call before answering return questions or issuing a refund."""
+    return _call(wrapper, hw_tools.check_return_eligibility, order_id)
+
+
+@function_tool
+def get_store_policy(
+    wrapper: RunContextWrapper[AuthContext], store: str
+) -> dict[str, Any]:
+    """Look up a store's return window by store name (e.g. "Northwind Books"). Use this for store-specific return-window questions that have no order id, instead of relying on help-center search."""
+    return _call(wrapper, hw_tools.get_store_policy, store)
+
+
 # Progressive disclosure: a session exposes only the tools its role can use.
 # Fewer tools mean fewer wrong choices and cleaner evals. At dev scale the
 # only difference is that support staff, who have no orders of their own,
@@ -439,6 +457,8 @@ _COMMON_TOOLS = [
     issue_refund,
     cancel_order,
     escalate_to_human,
+    check_return_eligibility,
+    get_store_policy,
 ]
 TOOLS_BY_ROLE = {
     "shopper": _COMMON_TOOLS + [list_my_orders, find_order],

@@ -9,13 +9,14 @@
     --bg: #f6f7f9; --panel: #fff; --line: #d9dde3; --ink: #1c2330;
     --muted: #68707d; --accent: #2f6df6; --fail: #c0392b; --pass: #1e8e5a;
     --user: #eef3ff; --asst: #f3f5f7; --tool: #fff7e8; --toolr: #eef9f0;
+    --hl: #fde68a; --hl-pending: #fca5a5; --sugg: #ddd6fe;
   }
   * { box-sizing: border-box; }
   body { margin: 0; font: 14px/1.5 -apple-system, Segoe UI, Roboto, sans-serif;
          color: var(--ink); background: var(--bg); }
   header { display: flex; align-items: center; gap: 16px; padding: 10px 16px;
            background: var(--panel); border-bottom: 1px solid var(--line);
-           position: sticky; top: 0; z-index: 10; }
+           position: sticky; top: 0; z-index: 20; }
   header h1 { font-size: 15px; margin: 0; }
   nav { display: flex; gap: 4px; }
   nav button { border: 1px solid var(--line); background: var(--panel);
@@ -23,15 +24,14 @@
   nav button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
   .grow { flex: 1; }
   .status { color: var(--muted); font-size: 12px; }
-  main { padding: 0; }
   .view { display: none; }
   .view.active { display: block; }
 
-  /* Review view: two columns */
-  #review { display: grid; grid-template-columns: 300px 1fr; height: calc(100vh - 52px); }
+  /* Review view: session list | conversation | margin notes */
+  #review { display: grid; grid-template-columns: 280px 1fr 300px; height: calc(100vh - 52px); }
   #sessionList { border-right: 1px solid var(--line); overflow: auto; background: var(--panel); }
   #sessionList .filters { padding: 8px; border-bottom: 1px solid var(--line);
-                          position: sticky; top: 0; background: var(--panel); }
+                          position: sticky; top: 0; background: var(--panel); z-index: 2; }
   #sessionList .row { padding: 8px 10px; border-bottom: 1px solid #eef0f3; cursor: pointer; }
   #sessionList .row:hover { background: #f0f4ff; }
   #sessionList .row.active { background: #e2ecff; }
@@ -39,25 +39,55 @@
   #sessionList .row .tags { color: var(--muted); font-size: 11px; }
   .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
   .dot.done { background: var(--pass); } .dot.none { background: #c9ced6; }
-  #convoPane { overflow: auto; padding: 16px 20px; }
-  .msg { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px;
-         margin: 8px 0; white-space: pre-wrap; }
+
+  #convoWrap { position: relative; overflow: auto; }
+  #convoPane { padding: 14px 18px; }
+  #marginCol { position: relative; border-left: 1px solid var(--line);
+               background: var(--panel); overflow: hidden; }
+  .msg { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
   .msg .who { font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
               color: var(--muted); margin-bottom: 3px; }
   .msg.user { background: var(--user); } .msg.assistant { background: var(--asst); }
   .msg.tool_call { background: var(--tool); } .msg.tool_result { background: var(--toolr); }
   .msg.observation { background: #f4f0fa; }
-  .msg pre { margin: 0; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+  .annotatable { white-space: pre-wrap; word-break: break-word; font-size: 13px; }
+  .msg pre.annotatable { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .hl { background: var(--hl); border-radius: 2px; cursor: pointer; }
+  .hl.sugg { background: var(--sugg); }
+  .hl.pending-highlight { background: var(--hl-pending); }
+  .hl.outline { outline: 2px solid var(--accent); }
   .turnsep { border: 0; border-top: 2px dashed var(--line); margin: 14px 0; }
-  .coder { position: sticky; bottom: 0; background: var(--panel);
-           border-top: 1px solid var(--line); padding: 10px; }
-  textarea { width: 100%; min-height: 56px; border: 1px solid var(--line);
-             border-radius: 6px; padding: 8px; font: inherit; resize: vertical; }
+  .tracehdr { color: var(--muted); font-size: 11px; margin-top: 4px; }
+
+  .mnote { position: absolute; left: 8px; right: 8px; border: 1px solid var(--line);
+           border-radius: 8px; padding: 7px 9px; background: #fffdf5; font-size: 12px; }
+  .mnote.sugg { background: #f6f4ff; }
+  .mnote.outline { outline: 2px solid var(--accent); }
+  .mnote .tag { font-size: 10px; text-transform: uppercase; color: var(--muted); }
+  .mnote .quote { color: var(--muted); font-style: italic; margin-bottom: 3px; }
+  .mnote .body { margin-bottom: 4px; }
+  .mnote .acts { display: flex; gap: 6px; }
+  .mnote button { border: 1px solid var(--line); background: #fff; border-radius: 5px;
+                  padding: 2px 8px; font-size: 11px; cursor: pointer; }
+  .mnote button.accept { border-color: var(--pass); color: var(--pass); }
+  .mnote button.reject { border-color: var(--fail); color: var(--fail); }
+
+  #popover { position: absolute; display: none; z-index: 50; background: var(--panel);
+             border: 1px solid var(--line); border-radius: 8px; padding: 8px;
+             box-shadow: 0 6px 20px rgba(0,0,0,.12); width: 280px; }
+  #popover textarea { width: 100%; min-height: 54px; border: 1px solid var(--line);
+                      border-radius: 6px; padding: 6px; font: inherit; resize: vertical; }
+  #popover .hint { color: var(--muted); font-size: 11px; margin-top: 4px; }
+
+  .convohdr { display: flex; align-items: center; gap: 10px; padding: 10px 18px 0; }
   .btn { border: 1px solid var(--line); background: var(--panel); border-radius: 6px;
-         padding: 6px 12px; cursor: pointer; }
+         padding: 5px 11px; cursor: pointer; font-size: 13px; }
   .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
   .btn.ghost { color: var(--muted); }
-  .btnrow { display: flex; gap: 8px; margin-top: 8px; align-items: center; flex-wrap: wrap; }
+  #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+           background: #1c2330; color: #fff; padding: 7px 14px; border-radius: 8px;
+           font-size: 13px; opacity: 0; transition: opacity .2s; z-index: 60; pointer-events: none; }
+  #toast.show { opacity: .95; }
 
   /* generic panels */
   .pad { padding: 16px 20px; }
@@ -71,17 +101,17 @@
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
           padding: 12px; margin-bottom: 12px; }
   .card h3 { margin: 0 0 6px; font-size: 14px; }
-  .kv { display: grid; grid-template-columns: 160px 1fr; gap: 4px 10px; font-size: 13px; }
+  .kv { display: grid; grid-template-columns: 170px 1fr; gap: 4px 10px; font-size: 13px; }
   .kv label { color: var(--muted); }
   input[type=text], select { border: 1px solid var(--line); border-radius: 6px;
                              padding: 5px 8px; font: inherit; }
-  .muted { color: var(--muted); }
+  .muted { color: var(--muted); } .warn { color: var(--fail); font-size: 12px; }
   .pill { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11px;
           background: #eef1f5; margin-right: 4px; }
   .bar { height: 10px; background: #eef1f5; border-radius: 5px; overflow: hidden; }
   .bar > i { display: block; height: 100%; background: var(--accent); }
   .suggestion { border-left: 3px solid #e0a200; }
-  .warn { color: var(--fail); font-size: 12px; }
+  .btnrow { display: flex; gap: 8px; margin: 8px 0; align-items: center; flex-wrap: wrap; }
 </style>
 </head>
 <body>
@@ -97,84 +127,90 @@
   <span class="grow"></span>
   <span class="status" id="status">loading…</span>
 </header>
-<main>
-  <section id="review" class="view active">
-    <div id="sessionList">
-      <div class="filters">
-        <select id="fBatch"><option value="">all batches</option></select>
-        <select id="fState">
-          <option value="">all</option>
-          <option value="unreviewed">unreviewed</option>
-          <option value="reviewed">reviewed</option>
-        </select>
-        <div class="muted" style="margin-top:6px" id="listCount"></div>
-      </div>
-      <div id="rows"></div>
-    </div>
-    <div style="display:flex; flex-direction:column; min-height:0;">
-      <div id="convoPane"><p class="muted pad">Select a session on the left to begin open coding.</p></div>
-      <div class="coder" id="coder" style="display:none">
-        <div class="muted" style="font-size:12px;margin-bottom:4px">
-          Open code — describe the <b>first</b> failure in your own words, then stop.
-          Leave a note per trace in this session.
-        </div>
-        <div id="coderTraces"></div>
-      </div>
-    </div>
-  </section>
 
-  <section id="taxonomy" class="view pad"></section>
-  <section id="labeling" class="view pad"></section>
-  <section id="suggestions" class="view pad"></section>
-  <section id="progress" class="view pad"></section>
-</main>
+<section id="review" class="view active">
+  <div id="sessionList">
+    <div class="filters">
+      <select id="fBatch"><option value="">all batches</option></select>
+      <select id="fState">
+        <option value="">all</option>
+        <option value="unreviewed">unreviewed</option>
+        <option value="reviewed">reviewed</option>
+      </select>
+      <div class="muted" style="margin-top:6px" id="listCount"></div>
+    </div>
+    <div id="rows"></div>
+  </div>
+
+  <div id="convoWrap">
+    <div class="convohdr" id="convohdr" style="display:none">
+      <div class="grow"><b id="convoTitle"></b> <span class="muted" id="convoMeta"></span></div>
+      <button class="btn" id="noFailBtn" onclick="markNoFailure()">No failure observed</button>
+    </div>
+    <div id="convoPane"><p class="muted pad">Select a session on the left. Then <b>select any span of text</b> in the conversation to attach an open code — it saves as a margin note anchored to that text.</p></div>
+  </div>
+
+  <div id="marginCol"></div>
+</section>
+
+<section id="taxonomy" class="view pad"></section>
+<section id="labeling" class="view pad"></section>
+<section id="suggestions" class="view pad"></section>
+<section id="progress" class="view pad"></section>
+
+<div id="popover">
+  <textarea id="note-input" placeholder="describe the failure in your own words…"></textarea>
+  <div class="hint">Enter to save · Esc to cancel</div>
+</div>
+<div id="toast"></div>
 
 <script>
 const API = location.origin;
-let SESSIONS = [], TRACES = {}, ANN = [], PATTERNS = {modes: []}, SUGG = [], LABELS = [];
+let SESSIONS = [], TRACES = {}, ANN = [], PATTERNS = {modes: []}, SUGG = [], LABELS = [], SAMPLES = [];
 let current = null;
 
 const j = (r) => r.json();
-async function getJSON(p){ return fetch(API+p).then(j); }
-async function postJSON(p, b){ return fetch(API+p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(j); }
+const getJSON = (p) => fetch(API+p).then(j);
+const postJSON = (p,b) => fetch(API+p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(j);
 const esc = (s) => String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const fmt = (v) => typeof v === 'string' ? v : JSON.stringify(v, null, 2);
+const clip = (s,n) => s.length>n ? s.slice(0,n)+'…' : s;
+let toastT;
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show');
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),1600); }
 
 async function boot(){
   const s = await getJSON('/api/sessions');
   SESSIONS = s.sessions;
   SESSIONS.forEach(se => se.traces.forEach(t => TRACES[t.id] = t));
-  [ANN, PATTERNS, SUGG, LABELS] = await Promise.all([
-    getJSON('/api/annotations').then(normAnn),
+  [ANN, PATTERNS, SUGG, LABELS, SAMPLES] = await Promise.all([
+    getJSON('/api/annotations').then(a => Array.isArray(a)?a:(a&&a.annotations)||[]),
     getJSON('/api/patterns').then(p => p && p.modes ? p : {modes:[]}),
     getJSON('/api/suggestions').then(x => Array.isArray(x)?x:[]),
     getJSON('/api/labels').then(x => Array.isArray(x)?x:[]),
+    getJSON('/api/samples').then(x => Array.isArray(x)?x:[]).catch(()=>[]),
   ]);
-  buildBatchFilter();
-  renderList(); renderStatus();
+  buildBatchFilter(); renderList(); renderStatus();
 }
-function normAnn(a){ return Array.isArray(a) ? a : (a && a.annotations) || []; }
-
 function renderStatus(){
-  const reviewed = new Set(ANN.map(a=>a.trace_id)).size;
+  const reviewed = new Set(ANN.filter(a=>a.type!=='label').map(a=>a.trace_id)).size;
   document.getElementById('status').textContent =
     `${Object.keys(TRACES).length} traces · ${SESSIONS.length} sessions · ${reviewed} reviewed · ${PATTERNS.modes.length} modes`;
 }
 
-/* ---- session list ---- */
-function annFor(tid){ return ANN.filter(a => a.trace_id === tid); }
-function sessionReviewed(se){ return se.traces.every(t => annFor(t.id).length); }
+/* ---------- session list ---------- */
+function annNotesFor(tid){ return ANN.filter(a => a.trace_id === tid && a.type!=='label'); }
+function sessionReviewed(se){ return se.traces.every(t => annNotesFor(t.id).length); }
 function buildBatchFilter(){
-  const samples = window._samples || [];
-  const batches = [...new Set(samples.map(s=>s.batch).filter(Boolean))];
+  const batches = [...new Set(SAMPLES.map(s=>s.batch).filter(Boolean))];
   const sel = document.getElementById('fBatch');
+  sel.querySelectorAll('option:not(:first-child)').forEach(o=>o.remove());
   batches.forEach(b => { const o=document.createElement('option'); o.value=o.textContent=b; sel.appendChild(o); });
 }
 function renderList(){
   const fb = document.getElementById('fBatch').value;
   const fs = document.getElementById('fState').value;
-  const samples = window._samples || [];
-  const inBatch = fb ? new Set(samples.filter(s=>s.batch===fb).map(s=>s.trace_id)) : null;
+  const inBatch = fb ? new Set(SAMPLES.filter(s=>s.batch===fb).map(s=>s.trace_id)) : null;
   const rows = document.getElementById('rows'); rows.innerHTML='';
   let shown = 0;
   SESSIONS.forEach(se => {
@@ -195,74 +231,209 @@ function renderList(){
 }
 ['fBatch','fState'].forEach(id=>document.getElementById(id).addEventListener('change',renderList));
 
-/* ---- conversation + open coding ---- */
-function renderMsg(m){
+/* ---------- conversation render ---------- */
+function curSession(){ return SESSIONS.find(s=>s.session_id===current); }
+function renderMsg(t, m, mi){
   const role = m.role || 'observation';
+  const key = t.id + ':' + mi;
   let label = role, body='';
-  if (role==='tool_call'){ label = 'tool call · '+(m.name||''); body = fmt(m.arguments); }
-  else if (role==='tool_result'){ label = 'tool result · '+(m.name||''); body = fmt(m.content); }
-  else if (role==='observation'){ label = m.label||'observation'; body = fmt(m.text); }
+  if (role==='tool_call'){ label='tool call · '+(m.name||''); body=fmt(m.arguments); }
+  else if (role==='tool_result'){ label='tool result · '+(m.name||''); body=fmt(m.content); }
+  else if (role==='observation'){ label=m.label||'observation'; body=fmt(m.text); }
   else body = fmt(m.text != null ? m.text : m.content);
-  return `<div class="msg ${role}"><div class="who">${esc(label)}</div><pre>${esc(body)}</pre></div>`;
+  const tag = (role==='tool_call'||role==='tool_result') ? 'pre' : 'div';
+  return `<div class="msg ${role}"><div class="who">${esc(label)}</div>`+
+    `<${tag} class="annotatable" data-key="${esc(key)}">${esc(body)}</${tag}></div>`;
 }
 function openSession(sid){
   current = sid; renderList();
-  const se = SESSIONS.find(s=>s.session_id===sid);
-  const pane = document.getElementById('convoPane');
-  let html = `<h2 style="margin:0 0 4px">${esc(sid)}</h2>`+
-    `<div class="muted" style="margin-bottom:10px">${esc((se.meta&&se.meta.role)||'')} · ${se.traces.length} trace(s)</div>`;
+  const se = curSession();
+  document.getElementById('convohdr').style.display='flex';
+  document.getElementById('convoTitle').textContent = sid;
+  document.getElementById('convoMeta').textContent = (se.meta&&se.meta.role||'') + ' · ' + se.traces.length + ' trace(s)';
+  renderConvo();
+}
+function renderConvo(){
+  const se = curSession(); if(!se) return;
+  let html = '';
   se.traces.forEach((t,i)=>{
     if(i) html += '<hr class="turnsep">';
-    html += `<div class="muted" style="font-size:11px">trace ${esc(t.id)}${t.meta&&t.meta.scenario_id?' · '+esc(t.meta.scenario_id):''}</div>`;
-    (t.trace||[]).forEach(m => html += renderMsg(m));
+    html += `<div class="tracehdr">trace ${esc(t.id)}${t.meta&&t.meta.scenario_id?' · '+esc(t.meta.scenario_id):''}</div>`;
+    (t.trace||[]).forEach((m,mi)=> html += renderMsg(t,m,mi));
   });
-  pane.innerHTML = html; pane.scrollTop = 0;
-  renderCoder(se);
-}
-function renderCoder(se){
-  const c = document.getElementById('coder'); c.style.display='block';
-  const wrap = document.getElementById('coderTraces'); wrap.innerHTML='';
-  se.traces.forEach(t=>{
-    const existing = annFor(t.id).find(a=>a.type!=='label');
-    const div = document.createElement('div');
-    div.style.marginBottom='8px';
-    div.innerHTML = `<textarea id="note_${t.id}" placeholder="open code for ${esc(t.id)} (or use 'No failure')">${esc(existing?existing.note:'')}</textarea>`+
-      `<div class="btnrow">`+
-      `<button class="btn primary" onclick="saveNote('${t.id}')">Save open code</button>`+
-      `<button class="btn" onclick="noFailure('${t.id}')">No failure observed</button>`+
-      `<span class="muted" id="st_${t.id}">${existing?('saved: '+(existing.note==='no failure observed'?'no failure':'open code')):''}</span>`+
-      `</div>`;
-    wrap.appendChild(div);
-  });
-}
-async function saveNote(tid){
-  const note = document.getElementById('note_'+tid).value.trim();
-  if(!note){ document.getElementById('st_'+tid).textContent='empty — not saved'; return; }
-  await upsertAnnotation(tid, note);
-  document.getElementById('st_'+tid).textContent='saved: open code';
-}
-async function noFailure(tid){
-  document.getElementById('note_'+tid).value='no failure observed';
-  await upsertAnnotation(tid, 'no failure observed');
-  document.getElementById('st_'+tid).textContent='saved: no failure';
-}
-async function upsertAnnotation(tid, note){
-  // Preserve history: keep prior open codes, append a new one marked current.
-  const t = TRACES[tid];
-  const id = 'ann-'+tid+'-'+Date.now();
-  ANN = ANN.filter(a => !(a.trace_id===tid && a.type!=='label' && a.current));
-  ANN.forEach(a=>{ if(a.trace_id===tid && a.type!=='label') a.current=false; });
-  ANN.push({ id, trace_id: tid, type:'open_code', note,
-             session_id: (t.meta&&t.meta.session_id)||null,
-             scenario_id: (t.meta&&t.meta.scenario_id)||null,
-             current: true, at: new Date().toISOString() });
-  await postJSON('/api/annotations', ANN);
-  renderList(); renderStatus();
+  document.getElementById('convoPane').innerHTML = html;
+  applyHighlights(); layoutMargin();
 }
 
-/* ---- taxonomy ---- */
+/* ---------- highlights + margin notes (ported from the reference UI) ---------- */
+function itemsForSession(){
+  const se = curSession(); if(!se) return [];
+  const ids = new Set(se.traces.map(t=>t.id));
+  const anns = ANN.filter(a => ids.has(a.trace_id) && a.type!=='label' && a.quote)
+                  .map(a => ({...a, kind:'human'}));
+  const sugg = SUGG.filter(s => ids.has(s.trace_id) && s.quote && s.status!=='rejected')
+                   .map(s => ({...s, kind:'sugg'}));
+  return [...anns, ...sugg];
+}
+function applyHighlights(){
+  const items = itemsForSession();
+  document.querySelectorAll('.annotatable').forEach(el => {
+    const key = el.dataset.key;
+    const mine = items.filter(it => it.key === key);
+    if(!mine.length) return;
+    const text = el.textContent;
+    const ranges = [];
+    mine.forEach(it => { const p = text.indexOf(it.quote); if(p>=0) ranges.push([p, p+it.quote.length, it]); });
+    if(!ranges.length) return;
+    ranges.sort((a,b)=>a[0]-b[0]);
+    let out='', cur=0;
+    ranges.forEach(([s,e,it])=>{ if(s<cur) return;
+      out += esc(text.slice(cur,s));
+      out += `<span class="hl ${it.kind==='sugg'?'sugg':''}" data-item="${it.id}">${esc(text.slice(s,e))}</span>`;
+      cur = e; });
+    out += esc(text.slice(cur));
+    el.innerHTML = out;
+  });
+}
+function layoutMargin(){
+  const col = document.getElementById('marginCol'); col.innerHTML='';
+  const wrap = document.getElementById('convoWrap');
+  const items = itemsForSession(); if(!items.length) return;
+  const wrapRect = wrap.getBoundingClientRect();
+  let lastBottom = 0;
+  const withPos = items.map(it => {
+    const hl = document.querySelector(`.hl[data-item="${it.id}"]`);
+    const top = hl ? (hl.getBoundingClientRect().top - wrapRect.top + wrap.scrollTop) : 0;
+    return {it, top, hl};
+  }).sort((a,b)=>a.top-b.top);
+  withPos.forEach(({it,top,hl})=>{
+    const note = document.createElement('div');
+    note.className = 'mnote ' + (it.kind==='sugg'?'sugg':'human');
+    let h='';
+    if(it.kind==='sugg') h += `<div class="tag">agent${it.mode?' · '+esc(it.mode):''}</div>`;
+    if(it.quote) h += `<div class="quote">"${esc(clip(it.quote,70))}"</div>`;
+    h += `<div class="body">${esc(it.note || it.rationale || (it.kind==='sugg'?'(suggested instance)':''))}</div>`;
+    if(it.kind==='sugg')
+      h += `<div class="acts"><button class="accept" onclick="acceptSugg('${it.id}')">accept</button>`+
+           `<button class="reject" onclick="rejectSugg('${it.id}')">dismiss</button></div>`;
+    else
+      h += `<div class="acts"><button onclick="delAnn('${it.id}')">delete</button></div>`;
+    note.innerHTML = h;
+    const y = Math.max(top, lastBottom);
+    note.style.top = y + 'px';
+    col.appendChild(note);
+    lastBottom = y + note.offsetHeight + 8;
+    if(hl){
+      note.addEventListener('mouseenter',()=>hl.classList.add('outline'));
+      note.addEventListener('mouseleave',()=>hl.classList.remove('outline'));
+      hl.addEventListener('mouseenter',()=>note.classList.add('outline'));
+      hl.addEventListener('mouseleave',()=>note.classList.remove('outline'));
+    }
+  });
+}
+
+/* ---------- in-place annotation ---------- */
+let pendingRange=null, pendingCtx=null;
+document.getElementById('convoPane').addEventListener('mouseup', ()=>{
+  const sel = window.getSelection();
+  if(!sel || sel.isCollapsed) return;
+  const text = sel.toString().trim(); if(!text) return;
+  const anchor = sel.anchorNode && sel.anchorNode.parentElement
+    ? sel.anchorNode.parentElement.closest('.annotatable') : null;
+  if(!anchor) return;
+  const range = sel.getRangeAt(0);
+  const span = document.createElement('span');
+  span.className = 'hl pending-highlight';
+  try { range.surroundContents(span); } catch(e){ return; }
+  pendingRange = span;
+  pendingCtx = { key: anchor.dataset.key, trace_id: anchor.dataset.key.split(':')[0], quote: text };
+  sel.removeAllRanges();
+  const wrap = document.getElementById('convoWrap');
+  const r = span.getBoundingClientRect();
+  const pop = document.getElementById('popover');
+  pop.style.display='block';
+  pop.style.left = (r.left + window.scrollX) + 'px';
+  pop.style.top = (r.bottom + window.scrollY + 6) + 'px';
+  const inp = document.getElementById('note-input'); inp.value=''; inp.focus();
+});
+document.getElementById('note-input').addEventListener('keydown', e=>{
+  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); commitAnn(); }
+  else if(e.key==='Escape'){ cancelAnn(); }
+});
+document.addEventListener('mousedown', e=>{
+  const pop = document.getElementById('popover');
+  if(pop.style.display==='block' && !pop.contains(e.target)) cancelAnn();
+});
+function clearPending(){
+  if(pendingRange && pendingRange.parentNode){
+    const p = pendingRange.parentNode;
+    while(pendingRange.firstChild) p.insertBefore(pendingRange.firstChild, pendingRange);
+    p.removeChild(pendingRange); p.normalize();
+  }
+  pendingRange=null; pendingCtx=null;
+  document.getElementById('popover').style.display='none';
+}
+function cancelAnn(){ clearPending(); renderConvo(); }
+async function commitAnn(){
+  const note = document.getElementById('note-input').value.trim();
+  if(!note || !pendingCtx){ clearPending(); return; }
+  const t = TRACES[pendingCtx.trace_id] || {};
+  ANN.push({ id:'a'+Date.now()+Math.floor(Math.random()*1000), trace_id:pendingCtx.trace_id,
+    type:'open_code', key:pendingCtx.key, quote:pendingCtx.quote, note,
+    session_id:(t.meta&&t.meta.session_id)||null, scenario_id:(t.meta&&t.meta.scenario_id)||null,
+    ts:new Date().toISOString() });
+  clearPending();
+  await saveAnn(); renderConvo(); renderList(); renderStatus();
+  toast('open code saved');
+}
+async function delAnn(id){ ANN = ANN.filter(a=>a.id!==id); await saveAnn(); renderConvo(); renderList(); renderStatus(); }
+async function markNoFailure(){
+  const se = curSession(); if(!se) return;
+  se.traces.forEach(t=>{
+    if(!annNotesFor(t.id).length)
+      ANN.push({ id:'a'+Date.now()+Math.floor(Math.random()*1000), trace_id:t.id,
+        type:'open_code', note:'no failure observed',
+        session_id:(t.meta&&t.meta.session_id)||null, scenario_id:(t.meta&&t.meta.scenario_id)||null,
+        ts:new Date().toISOString() });
+  });
+  await saveAnn(); renderConvo(); renderList(); renderStatus(); toast('marked no failure observed');
+}
+async function saveAnn(){ await postJSON('/api/annotations', ANN); }
+
+/* ---------- suggestions ---------- */
+async function acceptSugg(id){
+  const s = SUGG.find(x=>x.id===id); if(!s) return;
+  s.status='accepted'; s.resolved_at=new Date().toISOString();
+  const t = TRACES[s.trace_id]||{};
+  ANN.push({ id:'a'+Date.now()+Math.floor(Math.random()*1000), trace_id:s.trace_id, type:'open_code',
+    key:s.key, quote:s.quote, note:(s.rationale||s.note||'')+' (accepted from agent suggestion)',
+    source:'accepted_suggestion', session_id:(t.meta&&t.meta.session_id)||null, ts:new Date().toISOString() });
+  await Promise.all([postJSON('/api/suggestions',SUGG), saveAnn()]);
+  renderConvo(); renderSuggestions && renderSuggestions(); renderStatus(); toast('accepted');
+}
+async function rejectSugg(id){
+  const s = SUGG.find(x=>x.id===id); if(!s) return;
+  s.status='rejected'; s.resolved_at=new Date().toISOString();
+  await postJSON('/api/suggestions',SUGG); renderConvo(); toast('dismissed');
+}
+function renderSuggestions(){
+  const v = document.getElementById('suggestions');
+  if(!SUGG.length){ v.innerHTML='<p class="muted">No agent suggestions. Depth-search suggestions appear here and inline in Review (purple), kept separate from human notes until you accept them. At least one rejected suggestion is required.</p>'; return; }
+  let h='';
+  SUGG.forEach(s=>{
+    h += `<div class="card suggestion"><h3>${esc(s.mode||'suggestion')} <span class="pill">${esc(s.status||'pending')}</span></h3>`+
+      `<div class="muted">trace ${esc(s.trace_id||'')}${s.quote?' · "'+esc(clip(s.quote,60))+'"':''}</div>`+
+      `<p>${esc(s.rationale||s.note||'')}</p>`+
+      `<div class="btnrow"><button class="btn primary" onclick="resolveSuggList('${s.id}','accepted')">Accept</button>`+
+      `<button class="btn" onclick="resolveSuggList('${s.id}','rejected')">Reject</button></div></div>`;
+  });
+  v.innerHTML = h;
+}
+async function resolveSuggList(id,status){ if(status==='accepted') await acceptSugg(id); else await rejectSugg(id); renderSuggestions(); renderProgress(); }
+
+/* ---------- taxonomy ---------- */
 const EMPTY_MODE = () => ({ name:'', definition:'', requirement_source:'', evaluator_type:'code check',
-  boundary:'', positives:[], negatives:[], origin_annotations:[] });
+  boundary:'', positives:[], negatives:[] });
 function renderTaxonomy(){
   const v = document.getElementById('taxonomy');
   let h = `<div class="btnrow"><button class="btn primary" onclick="addMode()">+ Add failure mode</button>`+
@@ -273,7 +444,7 @@ function renderTaxonomy(){
       `<span class="pill">${esc(m.evaluator_type||'')}</span><span class="pill">${esc(m.requirement_source||'no req')}</span></h3>`+
       `<div class="kv">`+
       field(i,'name','name') + field(i,'definition','binary definition') +
-      field(i,'requirement_source','requirement source (SPEC id or revision)') +
+      field(i,'requirement_source','requirement source (SPEC id/revision)') +
       selField(i,'evaluator_type','evaluator type',['code check','LLM judge']) +
       field(i,'boundary','boundary vs. nearest mode') +
       `<label>positives</label><div>${(m.positives||[]).map(esc).join(', ')||'<span class="warn">need ≥3</span>'}</div>`+
@@ -286,18 +457,18 @@ function field(i,k,lbl){ return `<label>${lbl}</label><input type="text" value="
 function selField(i,k,lbl,opts){ return `<label>${lbl}</label><select onchange="editMode(${i},'${k}',this.value)">`+
   opts.map(o=>`<option ${PATTERNS.modes[i][k]===o?'selected':''}>${o}</option>`).join('')+`</select>`; }
 function editMode(i,k,val){ PATTERNS.modes[i][k]=val; savePatterns(); }
-function addMode(){ PATTERNS.modes.push(EMPTY_MODE()); savePatterns(); renderTaxonomy(); renderLabeling(); }
-function delMode(i){ if(confirm('Delete this mode?')){ PATTERNS.modes.splice(i,1); savePatterns(); renderTaxonomy(); renderLabeling(); } }
+function addMode(){ PATTERNS.modes.push(EMPTY_MODE()); savePatterns(); renderTaxonomy(); }
+function delMode(i){ if(confirm('Delete this mode?')){ PATTERNS.modes.splice(i,1); savePatterns(); renderTaxonomy(); } }
 async function savePatterns(){ await postJSON('/api/patterns', PATTERNS); renderStatus(); }
 
-/* ---- structured labeling ---- */
+/* ---------- structured labeling ---------- */
 function labelFor(tid,mode){ const r=LABELS.find(l=>l.trace_id===tid && l.mode===mode); return r?r.label:null; }
 function renderLabeling(){
   const v = document.getElementById('labeling');
   const modes = PATTERNS.modes.filter(m=>m.name);
-  if(!modes.length){ v.innerHTML='<p class="muted">Define modes in the Taxonomy tab first. Then apply every mode to every reviewed trace.</p>'; return; }
+  if(!modes.length){ v.innerHTML='<p class="muted">Define modes in Taxonomy first, then apply every mode to every reviewed trace.</p>'; return; }
   const reviewed = [...new Set(ANN.filter(a=>a.type!=='label').map(a=>a.trace_id))];
-  if(!reviewed.length){ v.innerHTML='<p class="muted">No reviewed traces yet. Open code some traces in Review first.</p>'; return; }
+  if(!reviewed.length){ v.innerHTML='<p class="muted">No reviewed traces yet — open code some in Review first.</p>'; return; }
   let h = `<p class="muted">Click a cell to cycle unset → Fail (present) → Pass (absent). Every reviewed trace needs a verdict for every mode.</p>`;
   h += '<table><tr><th>trace</th>'+modes.map(m=>`<th>${esc(m.name)}</th>`).join('')+'</tr>';
   reviewed.forEach(tid=>{
@@ -310,82 +481,55 @@ function renderLabeling(){
     });
     h += '</tr>';
   });
-  h += '</table>';
-  v.innerHTML = h;
+  v.innerHTML = h + '</table>';
 }
 async function cycleLabel(tid,mode){
   const cur = labelFor(tid,mode);
-  const next = cur===null?1:cur===1?0:null; // unset -> fail -> pass -> unset
+  const next = cur===null?1:cur===1?0:null;
   LABELS = LABELS.filter(l=>!(l.trace_id===tid && l.mode===mode));
-  if(next!==null){
-    const row = { trace_id: tid, mode, label: next, at:new Date().toISOString() };
-    LABELS.push(row);
-    await postJSON('/api/labels', row);
-  }
+  if(next!==null){ const row={trace_id:tid,mode,label:next,at:new Date().toISOString()}; LABELS.push(row); await postJSON('/api/labels',row); }
   renderLabeling(); renderProgress();
 }
 
-/* ---- suggestions (AI, kept separate from human annotations) ---- */
-function renderSuggestions(){
-  const v = document.getElementById('suggestions');
-  if(!SUGG.length){ v.innerHTML='<p class="muted">No agent suggestions. Depth-search suggestions appear here for explicit accept/reject; they are never labels until you accept them.</p>'; return; }
-  let h='';
-  SUGG.forEach((s,i)=>{
-    h += `<div class="card suggestion"><h3>${esc(s.mode||'suggestion')} <span class="pill">${esc(s.status||'pending')}</span></h3>`+
-      `<div class="muted">trace ${esc(s.trace_id||'')}</div>`+
-      `<p>${esc(s.rationale||s.note||'')}</p>`+
-      `<div class="btnrow"><button class="btn primary" onclick="resolveSugg(${i},'accepted')">Accept</button>`+
-      `<button class="btn" onclick="resolveSugg(${i},'rejected')">Reject</button></div></div>`;
-  });
-  v.innerHTML = h;
-}
-async function resolveSugg(i,status){
-  SUGG[i].status = status;
-  SUGG[i].resolved_at = new Date().toISOString();
-  await postJSON('/api/suggestions', SUGG);
-  renderSuggestions(); renderProgress();
-}
-
-/* ---- progress ---- */
+/* ---------- progress ---------- */
 function renderProgress(){
   const v = document.getElementById('progress');
-  const reviewedTraces = [...new Set(ANN.filter(a=>a.type!=='label').map(a=>a.trace_id))];
+  const reviewed = [...new Set(ANN.filter(a=>a.type!=='label').map(a=>a.trace_id))];
   const total = Object.keys(TRACES).length;
   const modes = PATTERNS.modes.filter(m=>m.name);
-  let h = `<div class="card"><h3>Review coverage</h3>`+
-    `<div class="kv"><label>traces reviewed</label><div>${reviewedTraces.length} / ${total} (target ≥100)</div>`+
+  let h = `<div class="card"><h3>Review coverage</h3><div class="kv">`+
+    `<label>traces reviewed</label><div>${reviewed.length} / ${total} (target ≥100)</div>`+
     `<label>failure modes</label><div>${modes.length} (target 5–8)</div>`+
     `<label>rejected suggestions</label><div>${SUGG.filter(s=>s.status==='rejected').length} (need ≥1)</div></div>`+
-    bar(reviewedTraces.length, 100)+`</div>`;
+    bar(reviewed.length,100)+`</div>`;
   if(modes.length){
-    h += `<div class="card"><h3>Label coverage per mode (over ${reviewedTraces.length} reviewed)</h3><table><tr><th>mode</th><th>Fail</th><th>Pass</th><th>unlabeled</th><th>sample fraction</th></tr>`;
+    h += `<div class="card"><h3>Label coverage per mode (over ${reviewed.length} reviewed)</h3><table><tr><th>mode</th><th>Fail</th><th>Pass</th><th>unlabeled</th><th>sample fraction</th></tr>`;
     modes.forEach(m=>{
       const ml = LABELS.filter(l=>l.mode===m.name);
       const fail = ml.filter(l=>l.label===1).length, pass = ml.filter(l=>l.label===0).length;
-      const unl = reviewedTraces.length - fail - pass;
-      const frac = reviewedTraces.length? (fail/reviewedTraces.length):0;
-      h += `<tr><td>${esc(m.name)}</td><td>${fail}</td><td>${pass}</td><td>${unl>0?('<span class=warn>'+unl+'</span>'):0}</td><td>${(frac*100).toFixed(0)}%</td></tr>`;
+      const unl = reviewed.length - fail - pass;
+      const frac = reviewed.length ? fail/reviewed.length : 0;
+      h += `<tr><td>${esc(m.name)}</td><td>${fail}</td><td>${pass}</td><td>${unl>0?'<span class=warn>'+unl+'</span>':0}</td><td>${(frac*100).toFixed(0)}%</td></tr>`;
     });
-    h += '</table><div class="muted" style="margin-top:6px">Report these as sample fractions, not prevalence (the sample is deliberately non-random).</div></div>';
+    h += '</table><div class="muted" style="margin-top:6px">Report as sample fractions, not prevalence — the sample is deliberately non-random.</div></div>';
   }
   v.innerHTML = h;
 }
-function bar(n,target){ const pct=Math.min(100, Math.round(n/target*100)); return `<div class="bar"><i style="width:${pct}%"></i></div>`; }
+function bar(n,target){ const pct=Math.min(100,Math.round(n/target*100)); return `<div class="bar"><i style="width:${pct}%"></i></div>`; }
 
-/* ---- view switching ---- */
+/* ---------- views ---------- */
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
   b.classList.add('active');
-  const v = b.dataset.v; document.getElementById(v).classList.add('active');
+  const v=b.dataset.v; document.getElementById(v).classList.add('active');
   if(v==='taxonomy') renderTaxonomy();
   if(v==='labeling') renderLabeling();
   if(v==='suggestions') renderSuggestions();
   if(v==='progress') renderProgress();
+  if(v==='review' && current) renderConvo();
 });
-
-/* load samples (batch tags) alongside boot */
-getJSON('/api/samples').then(s=>{ window._samples = Array.isArray(s)?s:[]; buildBatchFilter(); renderList(); }).catch(()=>{});
+let relT; window.addEventListener('resize', ()=>{ clearTimeout(relT); relT=setTimeout(()=>{ if(current) layoutMargin(); },120); });
 boot();
 </script>
 </body>

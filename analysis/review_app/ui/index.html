@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cartwheel HW4 trace review</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #fff; --line: #d9dde3; --ink: #1c2330;
+    --muted: #68707d; --accent: #2f6df6; --fail: #c0392b; --pass: #1e8e5a;
+    --user: #eef3ff; --asst: #f3f5f7; --tool: #fff7e8; --toolr: #eef9f0;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 -apple-system, Segoe UI, Roboto, sans-serif;
+         color: var(--ink); background: var(--bg); }
+  header { display: flex; align-items: center; gap: 16px; padding: 10px 16px;
+           background: var(--panel); border-bottom: 1px solid var(--line);
+           position: sticky; top: 0; z-index: 10; }
+  header h1 { font-size: 15px; margin: 0; }
+  nav { display: flex; gap: 4px; }
+  nav button { border: 1px solid var(--line); background: var(--panel);
+               padding: 5px 12px; border-radius: 6px; cursor: pointer; }
+  nav button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .grow { flex: 1; }
+  .status { color: var(--muted); font-size: 12px; }
+  main { padding: 0; }
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* Review view: two columns */
+  #review { display: grid; grid-template-columns: 300px 1fr; height: calc(100vh - 52px); }
+  #sessionList { border-right: 1px solid var(--line); overflow: auto; background: var(--panel); }
+  #sessionList .filters { padding: 8px; border-bottom: 1px solid var(--line);
+                          position: sticky; top: 0; background: var(--panel); }
+  #sessionList .row { padding: 8px 10px; border-bottom: 1px solid #eef0f3; cursor: pointer; }
+  #sessionList .row:hover { background: #f0f4ff; }
+  #sessionList .row.active { background: #e2ecff; }
+  #sessionList .row .sid { font-weight: 600; font-size: 12px; }
+  #sessionList .row .tags { color: var(--muted); font-size: 11px; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+  .dot.done { background: var(--pass); } .dot.none { background: #c9ced6; }
+  #convoPane { overflow: auto; padding: 16px 20px; }
+  .msg { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px;
+         margin: 8px 0; white-space: pre-wrap; }
+  .msg .who { font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+              color: var(--muted); margin-bottom: 3px; }
+  .msg.user { background: var(--user); } .msg.assistant { background: var(--asst); }
+  .msg.tool_call { background: var(--tool); } .msg.tool_result { background: var(--toolr); }
+  .msg.observation { background: #f4f0fa; }
+  .msg pre { margin: 0; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+  .turnsep { border: 0; border-top: 2px dashed var(--line); margin: 14px 0; }
+  .coder { position: sticky; bottom: 0; background: var(--panel);
+           border-top: 1px solid var(--line); padding: 10px; }
+  textarea { width: 100%; min-height: 56px; border: 1px solid var(--line);
+             border-radius: 6px; padding: 8px; font: inherit; resize: vertical; }
+  .btn { border: 1px solid var(--line); background: var(--panel); border-radius: 6px;
+         padding: 6px 12px; cursor: pointer; }
+  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn.ghost { color: var(--muted); }
+  .btnrow { display: flex; gap: 8px; margin-top: 8px; align-items: center; flex-wrap: wrap; }
+
+  /* generic panels */
+  .pad { padding: 16px 20px; }
+  table { border-collapse: collapse; width: 100%; background: var(--panel); }
+  th, td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; font-size: 13px; }
+  th { background: #eef1f5; position: sticky; top: 0; }
+  .cell { cursor: pointer; text-align: center; user-select: none; }
+  .cell.fail { background: #fdecea; color: var(--fail); font-weight: 600; }
+  .cell.pass { background: #e8f6ee; color: var(--pass); }
+  .cell.unset { color: #c9ced6; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+          padding: 12px; margin-bottom: 12px; }
+  .card h3 { margin: 0 0 6px; font-size: 14px; }
+  .kv { display: grid; grid-template-columns: 160px 1fr; gap: 4px 10px; font-size: 13px; }
+  .kv label { color: var(--muted); }
+  input[type=text], select { border: 1px solid var(--line); border-radius: 6px;
+                             padding: 5px 8px; font: inherit; }
+  .muted { color: var(--muted); }
+  .pill { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11px;
+          background: #eef1f5; margin-right: 4px; }
+  .bar { height: 10px; background: #eef1f5; border-radius: 5px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--accent); }
+  .suggestion { border-left: 3px solid #e0a200; }
+  .warn { color: var(--fail); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Cartwheel HW4 · trace review</h1>
+  <nav>
+    <button data-v="review" class="active">Review</button>
+    <button data-v="taxonomy">Taxonomy</button>
+    <button data-v="labeling">Labeling</button>
+    <button data-v="suggestions">Suggestions</button>
+    <button data-v="progress">Progress</button>
+  </nav>
+  <span class="grow"></span>
+  <span class="status" id="status">loading…</span>
+</header>
+<main>
+  <section id="review" class="view active">
+    <div id="sessionList">
+      <div class="filters">
+        <select id="fBatch"><option value="">all batches</option></select>
+        <select id="fState">
+          <option value="">all</option>
+          <option value="unreviewed">unreviewed</option>
+          <option value="reviewed">reviewed</option>
+        </select>
+        <div class="muted" style="margin-top:6px" id="listCount"></div>
+      </div>
+      <div id="rows"></div>
+    </div>
+    <div style="display:flex; flex-direction:column; min-height:0;">
+      <div id="convoPane"><p class="muted pad">Select a session on the left to begin open coding.</p></div>
+      <div class="coder" id="coder" style="display:none">
+        <div class="muted" style="font-size:12px;margin-bottom:4px">
+          Open code — describe the <b>first</b> failure in your own words, then stop.
+          Leave a note per trace in this session.
+        </div>
+        <div id="coderTraces"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="taxonomy" class="view pad"></section>
+  <section id="labeling" class="view pad"></section>
+  <section id="suggestions" class="view pad"></section>
+  <section id="progress" class="view pad"></section>
+</main>
+
+<script>
+const API = location.origin;
+let SESSIONS = [], TRACES = {}, ANN = [], PATTERNS = {modes: []}, SUGG = [], LABELS = [];
+let current = null;
+
+const j = (r) => r.json();
+async function getJSON(p){ return fetch(API+p).then(j); }
+async function postJSON(p, b){ return fetch(API+p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(j); }
+const esc = (s) => String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const fmt = (v) => typeof v === 'string' ? v : JSON.stringify(v, null, 2);
+
+async function boot(){
+  const s = await getJSON('/api/sessions');
+  SESSIONS = s.sessions;
+  SESSIONS.forEach(se => se.traces.forEach(t => TRACES[t.id] = t));
+  [ANN, PATTERNS, SUGG, LABELS] = await Promise.all([
+    getJSON('/api/annotations').then(normAnn),
+    getJSON('/api/patterns').then(p => p && p.modes ? p : {modes:[]}),
+    getJSON('/api/suggestions').then(x => Array.isArray(x)?x:[]),
+    getJSON('/api/labels').then(x => Array.isArray(x)?x:[]),
+  ]);
+  buildBatchFilter();
+  renderList(); renderStatus();
+}
+function normAnn(a){ return Array.isArray(a) ? a : (a && a.annotations) || []; }
+
+function renderStatus(){
+  const reviewed = new Set(ANN.map(a=>a.trace_id)).size;
+  document.getElementById('status').textContent =
+    `${Object.keys(TRACES).length} traces · ${SESSIONS.length} sessions · ${reviewed} reviewed · ${PATTERNS.modes.length} modes`;
+}
+
+/* ---- session list ---- */
+function annFor(tid){ return ANN.filter(a => a.trace_id === tid); }
+function sessionReviewed(se){ return se.traces.every(t => annFor(t.id).length); }
+function buildBatchFilter(){
+  const samples = window._samples || [];
+  const batches = [...new Set(samples.map(s=>s.batch).filter(Boolean))];
+  const sel = document.getElementById('fBatch');
+  batches.forEach(b => { const o=document.createElement('option'); o.value=o.textContent=b; sel.appendChild(o); });
+}
+function renderList(){
+  const fb = document.getElementById('fBatch').value;
+  const fs = document.getElementById('fState').value;
+  const samples = window._samples || [];
+  const inBatch = fb ? new Set(samples.filter(s=>s.batch===fb).map(s=>s.trace_id)) : null;
+  const rows = document.getElementById('rows'); rows.innerHTML='';
+  let shown = 0;
+  SESSIONS.forEach(se => {
+    if (inBatch && !se.traces.some(t=>inBatch.has(t.id))) return;
+    const done = sessionReviewed(se);
+    if (fs==='reviewed' && !done) return;
+    if (fs==='unreviewed' && done) return;
+    shown++;
+    const el = document.createElement('div');
+    el.className = 'row' + (current===se.session_id?' active':'');
+    const m = se.meta||{};
+    el.innerHTML = `<div class="sid"><span class="dot ${done?'done':'none'}"></span>${esc(se.session_id)}</div>`+
+      `<div class="tags">${esc(m.role||'')}${m.scenario_id?' · '+esc(m.scenario_id):''} · ${se.traces.length} trace(s)</div>`;
+    el.onclick = () => openSession(se.session_id);
+    rows.appendChild(el);
+  });
+  document.getElementById('listCount').textContent = `${shown} shown`;
+}
+['fBatch','fState'].forEach(id=>document.getElementById(id).addEventListener('change',renderList));
+
+/* ---- conversation + open coding ---- */
+function renderMsg(m){
+  const role = m.role || 'observation';
+  let label = role, body='';
+  if (role==='tool_call'){ label = 'tool call · '+(m.name||''); body = fmt(m.arguments); }
+  else if (role==='tool_result'){ label = 'tool result · '+(m.name||''); body = fmt(m.content); }
+  else if (role==='observation'){ label = m.label||'observation'; body = fmt(m.text); }
+  else body = fmt(m.text != null ? m.text : m.content);
+  return `<div class="msg ${role}"><div class="who">${esc(label)}</div><pre>${esc(body)}</pre></div>`;
+}
+function openSession(sid){
+  current = sid; renderList();
+  const se = SESSIONS.find(s=>s.session_id===sid);
+  const pane = document.getElementById('convoPane');
+  let html = `<h2 style="margin:0 0 4px">${esc(sid)}</h2>`+
+    `<div class="muted" style="margin-bottom:10px">${esc((se.meta&&se.meta.role)||'')} · ${se.traces.length} trace(s)</div>`;
+  se.traces.forEach((t,i)=>{
+    if(i) html += '<hr class="turnsep">';
+    html += `<div class="muted" style="font-size:11px">trace ${esc(t.id)}${t.meta&&t.meta.scenario_id?' · '+esc(t.meta.scenario_id):''}</div>`;
+    (t.trace||[]).forEach(m => html += renderMsg(m));
+  });
+  pane.innerHTML = html; pane.scrollTop = 0;
+  renderCoder(se);
+}
+function renderCoder(se){
+  const c = document.getElementById('coder'); c.style.display='block';
+  const wrap = document.getElementById('coderTraces'); wrap.innerHTML='';
+  se.traces.forEach(t=>{
+    const existing = annFor(t.id).find(a=>a.type!=='label');
+    const div = document.createElement('div');
+    div.style.marginBottom='8px';
+    div.innerHTML = `<textarea id="note_${t.id}" placeholder="open code for ${esc(t.id)} (or use 'No failure')">${esc(existing?existing.note:'')}</textarea>`+
+      `<div class="btnrow">`+
+      `<button class="btn primary" onclick="saveNote('${t.id}')">Save open code</button>`+
+      `<button class="btn" onclick="noFailure('${t.id}')">No failure observed</button>`+
+      `<span class="muted" id="st_${t.id}">${existing?('saved: '+(existing.note==='no failure observed'?'no failure':'open code')):''}</span>`+
+      `</div>`;
+    wrap.appendChild(div);
+  });
+}
+async function saveNote(tid){
+  const note = document.getElementById('note_'+tid).value.trim();
+  if(!note){ document.getElementById('st_'+tid).textContent='empty — not saved'; return; }
+  await upsertAnnotation(tid, note);
+  document.getElementById('st_'+tid).textContent='saved: open code';
+}
+async function noFailure(tid){
+  document.getElementById('note_'+tid).value='no failure observed';
+  await upsertAnnotation(tid, 'no failure observed');
+  document.getElementById('st_'+tid).textContent='saved: no failure';
+}
+async function upsertAnnotation(tid, note){
+  // Preserve history: keep prior open codes, append a new one marked current.
+  const t = TRACES[tid];
+  const id = 'ann-'+tid+'-'+Date.now();
+  ANN = ANN.filter(a => !(a.trace_id===tid && a.type!=='label' && a.current));
+  ANN.forEach(a=>{ if(a.trace_id===tid && a.type!=='label') a.current=false; });
+  ANN.push({ id, trace_id: tid, type:'open_code', note,
+             session_id: (t.meta&&t.meta.session_id)||null,
+             scenario_id: (t.meta&&t.meta.scenario_id)||null,
+             current: true, at: new Date().toISOString() });
+  await postJSON('/api/annotations', ANN);
+  renderList(); renderStatus();
+}
+
+/* ---- taxonomy ---- */
+const EMPTY_MODE = () => ({ name:'', definition:'', requirement_source:'', evaluator_type:'code check',
+  boundary:'', positives:[], negatives:[], origin_annotations:[] });
+function renderTaxonomy(){
+  const v = document.getElementById('taxonomy');
+  let h = `<div class="btnrow"><button class="btn primary" onclick="addMode()">+ Add failure mode</button>`+
+    `<span class="muted">Target 5–8 binary modes. Each needs a definition, ≥3 positives, ≥3 close negatives.</span></div>`;
+  if(!PATTERNS.modes.length) h += '<p class="muted">No modes yet. Draft them from your open codes (axial coding).</p>';
+  PATTERNS.modes.forEach((m,i)=>{
+    h += `<div class="card"><h3>${esc(m.name||'(unnamed)')} `+
+      `<span class="pill">${esc(m.evaluator_type||'')}</span><span class="pill">${esc(m.requirement_source||'no req')}</span></h3>`+
+      `<div class="kv">`+
+      field(i,'name','name') + field(i,'definition','binary definition') +
+      field(i,'requirement_source','requirement source (SPEC id or revision)') +
+      selField(i,'evaluator_type','evaluator type',['code check','LLM judge']) +
+      field(i,'boundary','boundary vs. nearest mode') +
+      `<label>positives</label><div>${(m.positives||[]).map(esc).join(', ')||'<span class="warn">need ≥3</span>'}</div>`+
+      `<label>close negatives</label><div>${(m.negatives||[]).map(esc).join(', ')||'<span class="warn">need ≥3</span>'}</div>`+
+      `</div><div class="btnrow"><button class="btn ghost" onclick="delMode(${i})">delete</button></div></div>`;
+  });
+  v.innerHTML = h;
+}
+function field(i,k,lbl){ return `<label>${lbl}</label><input type="text" value="${esc(PATTERNS.modes[i][k]||'')}" oninput="editMode(${i},'${k}',this.value)">`; }
+function selField(i,k,lbl,opts){ return `<label>${lbl}</label><select onchange="editMode(${i},'${k}',this.value)">`+
+  opts.map(o=>`<option ${PATTERNS.modes[i][k]===o?'selected':''}>${o}</option>`).join('')+`</select>`; }
+function editMode(i,k,val){ PATTERNS.modes[i][k]=val; savePatterns(); }
+function addMode(){ PATTERNS.modes.push(EMPTY_MODE()); savePatterns(); renderTaxonomy(); renderLabeling(); }
+function delMode(i){ if(confirm('Delete this mode?')){ PATTERNS.modes.splice(i,1); savePatterns(); renderTaxonomy(); renderLabeling(); } }
+async function savePatterns(){ await postJSON('/api/patterns', PATTERNS); renderStatus(); }
+
+/* ---- structured labeling ---- */
+function labelFor(tid,mode){ const r=LABELS.find(l=>l.trace_id===tid && l.mode===mode); return r?r.label:null; }
+function renderLabeling(){
+  const v = document.getElementById('labeling');
+  const modes = PATTERNS.modes.filter(m=>m.name);
+  if(!modes.length){ v.innerHTML='<p class="muted">Define modes in the Taxonomy tab first. Then apply every mode to every reviewed trace.</p>'; return; }
+  const reviewed = [...new Set(ANN.filter(a=>a.type!=='label').map(a=>a.trace_id))];
+  if(!reviewed.length){ v.innerHTML='<p class="muted">No reviewed traces yet. Open code some traces in Review first.</p>'; return; }
+  let h = `<p class="muted">Click a cell to cycle unset → Fail (present) → Pass (absent). Every reviewed trace needs a verdict for every mode.</p>`;
+  h += '<table><tr><th>trace</th>'+modes.map(m=>`<th>${esc(m.name)}</th>`).join('')+'</tr>';
+  reviewed.forEach(tid=>{
+    h += `<tr><td title="${esc((TRACES[tid]&&TRACES[tid].meta&&TRACES[tid].meta.scenario_id)||'')}">${esc(tid)}</td>`;
+    modes.forEach(m=>{
+      const lab = labelFor(tid,m.name);
+      const cls = lab===1?'fail':lab===0?'pass':'unset';
+      const txt = lab===1?'Fail':lab===0?'Pass':'·';
+      h += `<td class="cell ${cls}" onclick="cycleLabel('${tid}','${esc(m.name)}')">${txt}</td>`;
+    });
+    h += '</tr>';
+  });
+  h += '</table>';
+  v.innerHTML = h;
+}
+async function cycleLabel(tid,mode){
+  const cur = labelFor(tid,mode);
+  const next = cur===null?1:cur===1?0:null; // unset -> fail -> pass -> unset
+  LABELS = LABELS.filter(l=>!(l.trace_id===tid && l.mode===mode));
+  if(next!==null){
+    const row = { trace_id: tid, mode, label: next, at:new Date().toISOString() };
+    LABELS.push(row);
+    await postJSON('/api/labels', row);
+  }
+  renderLabeling(); renderProgress();
+}
+
+/* ---- suggestions (AI, kept separate from human annotations) ---- */
+function renderSuggestions(){
+  const v = document.getElementById('suggestions');
+  if(!SUGG.length){ v.innerHTML='<p class="muted">No agent suggestions. Depth-search suggestions appear here for explicit accept/reject; they are never labels until you accept them.</p>'; return; }
+  let h='';
+  SUGG.forEach((s,i)=>{
+    h += `<div class="card suggestion"><h3>${esc(s.mode||'suggestion')} <span class="pill">${esc(s.status||'pending')}</span></h3>`+
+      `<div class="muted">trace ${esc(s.trace_id||'')}</div>`+
+      `<p>${esc(s.rationale||s.note||'')}</p>`+
+      `<div class="btnrow"><button class="btn primary" onclick="resolveSugg(${i},'accepted')">Accept</button>`+
+      `<button class="btn" onclick="resolveSugg(${i},'rejected')">Reject</button></div></div>`;
+  });
+  v.innerHTML = h;
+}
+async function resolveSugg(i,status){
+  SUGG[i].status = status;
+  SUGG[i].resolved_at = new Date().toISOString();
+  await postJSON('/api/suggestions', SUGG);
+  renderSuggestions(); renderProgress();
+}
+
+/* ---- progress ---- */
+function renderProgress(){
+  const v = document.getElementById('progress');
+  const reviewedTraces = [...new Set(ANN.filter(a=>a.type!=='label').map(a=>a.trace_id))];
+  const total = Object.keys(TRACES).length;
+  const modes = PATTERNS.modes.filter(m=>m.name);
+  let h = `<div class="card"><h3>Review coverage</h3>`+
+    `<div class="kv"><label>traces reviewed</label><div>${reviewedTraces.length} / ${total} (target ≥100)</div>`+
+    `<label>failure modes</label><div>${modes.length} (target 5–8)</div>`+
+    `<label>rejected suggestions</label><div>${SUGG.filter(s=>s.status==='rejected').length} (need ≥1)</div></div>`+
+    bar(reviewedTraces.length, 100)+`</div>`;
+  if(modes.length){
+    h += `<div class="card"><h3>Label coverage per mode (over ${reviewedTraces.length} reviewed)</h3><table><tr><th>mode</th><th>Fail</th><th>Pass</th><th>unlabeled</th><th>sample fraction</th></tr>`;
+    modes.forEach(m=>{
+      const ml = LABELS.filter(l=>l.mode===m.name);
+      const fail = ml.filter(l=>l.label===1).length, pass = ml.filter(l=>l.label===0).length;
+      const unl = reviewedTraces.length - fail - pass;
+      const frac = reviewedTraces.length? (fail/reviewedTraces.length):0;
+      h += `<tr><td>${esc(m.name)}</td><td>${fail}</td><td>${pass}</td><td>${unl>0?('<span class=warn>'+unl+'</span>'):0}</td><td>${(frac*100).toFixed(0)}%</td></tr>`;
+    });
+    h += '</table><div class="muted" style="margin-top:6px">Report these as sample fractions, not prevalence (the sample is deliberately non-random).</div></div>';
+  }
+  v.innerHTML = h;
+}
+function bar(n,target){ const pct=Math.min(100, Math.round(n/target*100)); return `<div class="bar"><i style="width:${pct}%"></i></div>`; }
+
+/* ---- view switching ---- */
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  const v = b.dataset.v; document.getElementById(v).classList.add('active');
+  if(v==='taxonomy') renderTaxonomy();
+  if(v==='labeling') renderLabeling();
+  if(v==='suggestions') renderSuggestions();
+  if(v==='progress') renderProgress();
+});
+
+/* load samples (batch tags) alongside boot */
+getJSON('/api/samples').then(s=>{ window._samples = Array.isArray(s)?s:[]; buildBatchFilter(); renderList(); }).catch(()=>{});
+boot();
+</script>
+</body>
+</html>
